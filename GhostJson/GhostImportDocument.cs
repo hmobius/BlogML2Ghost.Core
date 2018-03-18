@@ -4,7 +4,7 @@ namespace BlogML2Ghost.Core.GhostJson
 {
     public class GhostImportDocument
     {
-        public GhostMetadata meta { get; set; }    
-        public GhostData data { get; set; }
+        public GhostMetadata meta { get;  }   = new GhostMetadata();
+        public GhostData data { get; set; } = new GhostData();
     }
 }

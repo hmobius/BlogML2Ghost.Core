@@ -6,4 +6,10 @@
   <ItemGroup>
     <PackageReference Include="Newtonsoft.Json" Version="11.0.1"/>
   </ItemGroup>
+  <ItemGroup>
+    <Content Remove="lib\blogml.xsd" />
+  </ItemGroup>
+  <ItemGroup>
+    <EmbeddedResource Include="lib\blogml.xsd" />
+  </ItemGroup>  
 </Project>
