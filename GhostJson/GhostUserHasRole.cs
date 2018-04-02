@@ -11,7 +11,7 @@ namespace BlogML2Ghost.Core.GhostJson
             role_id = roleId;
         }
 
-        public int user_id { get; set; }
         public int role_id { get; set; }
+        public int user_id { get; set; }
     }
 }

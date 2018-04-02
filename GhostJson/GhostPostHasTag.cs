@@ -7,5 +7,6 @@ namespace BlogML2Ghost.Core.GhostJson
     {
         public int tag_id { get; set; }
         public int post_id { get; set; }
+        public int sort_order { get; set; }
     }
 }

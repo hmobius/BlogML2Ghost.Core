@@ -7,6 +7,7 @@ using BlogML2Ghost.Core.GhostJson;
 using BlogML2Ghost.Core.ExtensionMethods;
 using System.Globalization;
 using Newtonsoft.Json;
+using Newtonsoft.Json.Converters;
 
 namespace BlogML2Ghost.Core
 {
@@ -15,6 +16,10 @@ namespace BlogML2Ghost.Core
         BlogMLBlog BlogToConvert { get; set; }
 
         GhostImportDocument ghostDoc { get; set; } = new GhostImportDocument();
+
+        public bool AssignAllToOneUser { get; set; }
+        public int OneUserId { get; set; }
+        public int GreatestExistingUserId { get; set; }
 
         public void Run()
         {
@@ -33,13 +38,17 @@ namespace BlogML2Ghost.Core
 
         private void SaveGhostFileToDesktop()
         {
-            JsonSerializer ser = new JsonSerializer();
-            ser.NullValueHandling = NullValueHandling.Include;
+            JsonSerializerSettings settings = new JsonSerializerSettings();
+            settings.NullValueHandling = NullValueHandling.Include;
+            settings.Formatting = Formatting.Indented;
+            settings.DateFormatString = "yyyy'-'MM'-'dd' 'HH':'mm':'ss";
+            settings.Converters.Add(new StringEnumConverter());
+            settings.Converters.Add(new FormatNumbersAsTextConverter());
 
             using (StreamWriter ghostStream = new StreamWriter(GenerateOutputFileLocation()))
-            using (JsonWriter ghostWriter = new JsonTextWriter(ghostStream))
             {
-                ser.Serialize(ghostWriter, ghostDoc);
+                JsonSerializer ser = JsonSerializer.Create(settings);
+                ser.Serialize(ghostStream, ghostDoc);
             }
         }
 
@@ -49,6 +58,8 @@ namespace BlogML2Ghost.Core
             {
                 Console.WriteLine(post.Title);
 
+                int postauthorId = AssignAllToOneUser ? OneUserId : GetNewUserIdForPostAuthor(post.Authors[0]);
+
                 var newPost = new GhostPost
                 {
                     id = ghostDoc.data.posts.Count + 1,
@@ -57,11 +68,15 @@ namespace BlogML2Ghost.Core
                     html = post.Content.Text,
                     page = (post.PostType == BlogPostTypes.Article),
                     status = post.IsPublished ? GhostPostStatus.published : GhostPostStatus.draft,
-                    language = new CultureInfo("en-GB"),
-                    created_at = post.DateCreated.AsMillisecondsSinceEpoch(),
-                    updated_at = post.DateModified.AsMillisecondsSinceEpoch(),
-                    published_at = post.DateCreated.AsMillisecondsSinceEpoch(),
-                    author_id = GetNewUserIdForPostAuthor(post.Authors[0])
+                    locale = new CultureInfo("en-GB"),
+                    visibility = GhostVisibility.@public,
+                    author_id = postauthorId,
+                    created_at = post.DateCreated,
+                    created_by = postauthorId,
+                    updated_at = post.DateModified,
+                    updated_by = postauthorId,
+                    published_at = post.DateCreated,
+                    published_by = postauthorId
                 };
 
                 ghostDoc.data.posts.Add(newPost);
@@ -74,29 +89,63 @@ namespace BlogML2Ghost.Core
                             post_id = newPost.id,
                             tag_id = ghostDoc.data.tags
                                                 .Where(tag => tag.BlogMLid == catref.Ref)
-                                                .FirstOrDefault().id
+                                                .FirstOrDefault().id,
+                            sort_order = 0
                         }
                     );
                 }
 
-
+                if (AssignAllToOneUser)
+                {
+                    ghostDoc.data.posts_authors.Add(
+                        new GhostPostHasAuthor
+                        {
+                            post_id = newPost.id,
+                            author_id = OneUserId,
+                            sort_order = 0
+                        }
+                    );
+                }
+                else
+                {
+                    foreach (BlogMLAuthorReference author in post.Authors)
+                    {
+                        ghostDoc.data.posts_authors.Add(
+                            new GhostPostHasAuthor
+                            {
+                                post_id = newPost.id,
+                                author_id = GetNewUserIdForPostAuthor(author),
+                                sort_order = 0
+                            }
+                        );
+                    }
+                }
             }
         }
 
         private int GetNewUserIdForPostAuthor(BlogMLAuthorReference authorRef)
         {
+            if (AssignAllToOneUser)
+            {
+                return OneUserId;
+            }
+
             var userMatches = ghostDoc.data.users.Where(user => user.name.ToLower() == authorRef.Ref.ToLower());
 
             if (!userMatches.Any())
             {
                 var newUser = new GhostUser {
-                        id = ghostDoc.data.users.Count + 1,
+                        id = GreatestExistingUserId +  ghostDoc.data.users.Count + 1,
                         name = authorRef.Ref,
-                        slug = authorRef.Ref.AsSlug(GhostConstants.maxSlugLength),
+                        slug = authorRef.Ref.AsSlug(GhostConstants.maxSlugLength),                
                         status = GhostUserStatus.disabled,
-                        language = new CultureInfo("en-GB"),
-                        created_at = DateTime.UtcNow.AsMillisecondsSinceEpoch(),
-                        updated_at = DateTime.UtcNow.AsMillisecondsSinceEpoch()
+                        locale = new CultureInfo("en-GB"),
+                        visibility = GhostVisibility.@private,
+                        last_seen = DateTime.UtcNow,
+                        created_at = DateTime.UtcNow,
+                        created_by = 1,
+                        updated_at = DateTime.UtcNow,
+                        updated_by = 1
                     };
 
                 ghostDoc.data.users.Add(newUser);
@@ -108,19 +157,27 @@ namespace BlogML2Ghost.Core
 
         private void ConvertAuthorsToUsers()
         {
-            // TODO Ask about culture for each author as processed.
+            if (AssignAllToOneUser)
+            {
+                return;
+            }
+
             foreach (BlogMLAuthor author in BlogToConvert.Authors)
             {
                 ghostDoc.data.users.Add(
                     new GhostUser {
-                        id = ghostDoc.data.users.Count + 1,
+                        id = GreatestExistingUserId + ghostDoc.data.users.Count + 1,
                         name = author.ID,
                         slug = author.ID.AsSlug(GhostConstants.maxSlugLength),
                         email = author.email,
                         status = GhostUserStatus.active,
-                        language = new CultureInfo("en-GB"),
-                        created_at = author.DateCreated.AsMillisecondsSinceEpoch(),
-                        updated_at = author.DateModified.AsMillisecondsSinceEpoch()
+                        locale = new CultureInfo("en-GB"),
+                        visibility = GhostVisibility.@public,
+                        last_seen = DateTime.UtcNow,
+                        created_at = author.DateCreated,
+                        created_by = 1,
+                        updated_at = author.DateModified,
+                        updated_by = 1
                     }
                 );
             }
@@ -132,11 +189,16 @@ namespace BlogML2Ghost.Core
             {
                 ghostDoc.data.tags.Add(
                     new GhostTag {
-                        id = ghostDoc.data.tags.Count+ 1,
+                        id =  ghostDoc.data.tags.Count+ 1,
                         name = category.Title,
                         slug = category.Title.AsSlug(GhostConstants.maxSlugLength),
                         description = category.Description,
-                        BlogMLid = category.ID
+                        visibility = GhostVisibility.@public,
+                        BlogMLid = category.ID,
+                        created_at = DateTime.UtcNow,
+                        created_by = 1,
+                        updated_at = DateTime.UtcNow,
+                        updated_by = 1                        
                     }
                 );
             }
@@ -159,31 +221,25 @@ namespace BlogML2Ghost.Core
 
         private bool Initialize()
         {
-            Console.Write("BlogML File To convert (full path)? ");
-            var filelocation = Console.ReadLine();
-
-            if (string.IsNullOrWhiteSpace(filelocation))
+            string blogMLFileLocation;
+            if (!CommandLineUtils.TryGetFileLocation("BlogML File To convert", out blogMLFileLocation))
             {
-                Console.WriteLine("{0} is not a valid file location", filelocation);
                 return false;
             }
 
-            if (!File.Exists(filelocation))
-            {
-                Console.WriteLine("{0} does not exist", filelocation);
-                return false;
-            }
-
-            // if (BlogMLIsInvalid(filelocation))
-            // {
-            //     Console.WriteLine("{0} is not a valid BlogML file", filelocation);
-            //     return false;
-            // }
-
-            using (StreamReader blogReader = File.OpenText(filelocation))
+            using (StreamReader blogReader = File.OpenText(blogMLFileLocation))
             {
                 BlogToConvert = BlogMLSerializer.Deserialize(blogReader);
             }
+
+            AssignAllToOneUser = CommandLineUtils.GetBoolean("Assign all posts and tags to one existing user?");
+
+            if (AssignAllToOneUser)
+            {
+                OneUserId = CommandLineUtils.GetInteger("What is the ID of the one existing user?");
+            }
+
+            GreatestExistingUserId = CommandLineUtils.GetInteger("What is the highest integer id of any existing user in your ghost blog?");
 
             return true;
         }

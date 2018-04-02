@@ -7,7 +7,7 @@ namespace BlogML2Ghost.Core.GhostJson
 {
     public class GhostMetadata
     {
-        readonly string currentVersion = "003";
+        readonly string currentVersion = "1.22.0";
 
         public long exported_on { get; private set; }
 

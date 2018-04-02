@@ -1,20 +1,21 @@
 using System;
 using System.Xml.Serialization;
 using System.Collections;
+using System.Xml;
 
 namespace BlogML2Ghost.Core.BlogML.Xml
 {
     [Serializable]
     public sealed class BlogMLPost : BlogMLNode
     {
-		[XmlAttribute("post-url")]
-		public string PostUrl { get; set; }
+        [XmlAttribute("post-url")]
+        public string PostUrl { get; set; }
 
         [XmlAttribute("hasexcerpt")]
-        public bool HasExcerpt { get; set; }= false;
+        public bool HasExcerpt { get; set; } = false;
 
         [XmlAttribute("type")]
-        public BlogPostTypes PostType{ get; set; } = new BlogPostTypes();
+        public BlogPostTypes PostType { get; set; } = new BlogPostTypes();
 
         [XmlAttribute("views")]
         public UInt32 Views { get; set; } = 0;
@@ -22,8 +23,23 @@ namespace BlogML2Ghost.Core.BlogML.Xml
         [XmlElement("post-name")]
         public string PostName { get; set; }
 
+        [XmlIgnore]
+        public bool IsPublished { get; set; }
+
         [XmlElement("is-published")]
-        public bool IsPublished { get; set; } 
+        public string IsPublishedSerialize
+        {
+            get { return this.IsPublished ? "true" : "false"; }
+            set
+            {
+                if (value.ToLower().Equals("true"))
+                    this.IsPublished = true;
+                else if (value.ToLower().Equals("false"))
+                    this.IsPublished = false;
+                else
+                    this.IsPublished = XmlConvert.ToBoolean(value);
+            }
+        }
 
         [XmlElement("content")]
         public BlogMLContent Content { get; set; } = new BlogMLContent();
@@ -34,18 +50,18 @@ namespace BlogML2Ghost.Core.BlogML.Xml
         [XmlArray("authors")]
         [XmlArrayItem("author", typeof(BlogMLAuthorReference))]
         public AuthorReferenceCollection Authors { get; } = new AuthorReferenceCollection();
-  
+
         [XmlArray("categories")]
         [XmlArrayItem("category", typeof(BlogMLCategoryReference))]
-        public CategoryReferenceCollection Categories { get; }  = new CategoryReferenceCollection();
+        public CategoryReferenceCollection Categories { get; } = new CategoryReferenceCollection();
 
         [XmlArray("comments")]
         [XmlArrayItem("comment", typeof(BlogMLComment))]
-        public CommentCollection Comments { get; }  = new CommentCollection();
+        public CommentCollection Comments { get; } = new CommentCollection();
 
         [XmlArray("trackbacks")]
         [XmlArrayItem("trackback", typeof(BlogMLTrackback))]
-        public TrackbackCollection Trackbacks { get; }  = new TrackbackCollection();
+        public TrackbackCollection Trackbacks { get; } = new TrackbackCollection();
 
         [XmlArray("attachments")]
         [XmlArrayItem("attachment", typeof(BlogMLAttachment))]
@@ -66,8 +82,9 @@ namespace BlogML2Ghost.Core.BlogML.Xml
 
             public BlogMLAuthorReference Add(string authorID)
             {
-                BlogMLAuthorReference item = new BlogMLAuthorReference(){ 
-                    Ref = authorID 
+                BlogMLAuthorReference item = new BlogMLAuthorReference()
+                {
+                    Ref = authorID
                 };
                 base.Add(item);
                 return item;
@@ -117,7 +134,8 @@ namespace BlogML2Ghost.Core.BlogML.Xml
 
             public BlogMLCategoryReference Add(string categoryID)
             {
-                BlogMLCategoryReference item = new BlogMLCategoryReference(){
+                BlogMLCategoryReference item = new BlogMLCategoryReference()
+                {
                     Ref = categoryID
                 };
                 base.Add(item);
